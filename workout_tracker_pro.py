@@ -124,74 +124,94 @@ def log_action(admin, action, target="", details=""):
     }).execute()
 
 def import_workout_logs(uid, df):
-    # Auto-normalize columns (case-insensitive, strip spaces, handle variations)
-    df.columns = df.columns.str.strip().str.lower()
-    col_map = {}
-    for col in df.columns:
-        clean_col = col.replace(" ", "").replace("(kg)", "").replace("kg", "").replace("wgt", "weight")
-        if 'date' in clean_col or 'day' in clean_col:
-            col_map['date'] = col
-        elif 'exercise' in clean_col or 'exer' in clean_col:
-            col_map['exercise'] = col
-        elif 'sets' in clean_col:
-            col_map['sets'] = col
-        elif 'reps' in clean_col:
-            col_map['reps'] = col
-        elif 'weight' in clean_col:
-            col_map['weight'] = col
-
-    required = {'date', 'exercise', 'sets', 'reps', 'weight'}
-    missing = required - set(col_map.keys())
-    if missing:
-        st.error(f"Missing columns: {missing}. Expected: Date, Exercise, Sets, Reps, Weight(kg)")
-        st.info("Tip: Columns are case-insensitive — e.g., 'date', 'WEIGHT KG', or 'Exerc' all work.")
+    if df.empty:
+        st.error("File is empty!")
         return
 
-    # Rename to standard names
-    df = df.rename(columns=col_map)
+    # 1. Normalize column names once
+    original_cols = df.columns.tolist()
+    df.columns = df.columns.str.strip()
+    col_lower = {col.strip().lower(): col.strip() for col in df.columns}
 
-    # Clean and convert data (bulletproof)
-    df = df.copy()
-    df['Date'] = pd.to_datetime(df['date'], dayfirst=True, errors='coerce', infer_datetime_format=True)
-    df = df.dropna(subset=['Date'])  # Drop invalid dates
+    # 2. Smart column detection (very forgiving)
+    date_col = exercise_col = sets_col = reps_col = weight_col = None
 
-    # Clean numeric columns (handle text like "80kg", "3 sets", "8 reps")
-    def clean_numeric(val):
-        if pd.isna(val):
+    for lower, orig in col_lower.items():
+        if any(x in lower for x in ['date', 'day', 'time']):
+            date_col = orig
+        elif any(x in lower for x in ['exercise', 'exer', 'movement', 'lift']):
+            exercise_col = orig
+        elif 'set' in lower:
+            sets_col = orig
+        elif 'rep' in lower:
+            reps_col = orig
+        elif any(x in lower for x in ['weight', 'wgt', 'kg', 'load', 'lbs']):
+            weight_col = orig
+
+    missing = []
+    if not date_col: missing.append("Date")
+    if not exercise_col: missing.append("Exercise")
+    if not sets_col: missing.append("Sets")
+    if not reps_col: missing.append("Reps")
+    if not weight_col: missing.append("Weight (kg)")
+
+    if missing:
+        st.error(f"Could not find columns: {', '.join(missing)}")
+        st.info("Detected columns: " + ", ".join(original_cols))
+        return
+
+    # 3. Keep only needed columns and rename
+    df = df[[date_col, exercise_col, sets_col, reps_col, weight_col]].copy()
+    df.columns = ['date', 'exercise', 'sets', 'reps', 'weight']
+
+    # 4. Clean numeric values (removes "kg", "lbs", "reps", etc.)
+    def clean_number(x):
+        if pd.isna(x):
             return None
-        str_val = str(val).strip().lower()
-        # Remove text like "kg", "sets", "reps"
-        clean = ''.join(c for c in str_val if c.isdigit() or c == '.')
+        s = str(x).strip().lower()
+        s = ''.join(c for c in s if c.isdigit() or c in '.-')
         try:
-            return float(clean) if clean else None
+            return float(s) if s else None
         except:
             return None
 
-    df['Sets'] = df['sets'].apply(clean_numeric)
-    df['Reps'] = df['reps'].apply(clean_numeric)
-    df['Weight (kg)'] = df['weight'].apply(clean_numeric)
+    df['sets'] = df['sets'].apply(clean_number)
+    df['reps'] = df['reps'].apply(clean_number)
+    df['weight'] = df['weight'].apply(clean_number)
 
-    df = df.dropna(subset=['Sets', 'Reps', 'Weight (kg)'])  # Drop invalid numerics
+    # 5. Parse dates (very forgiving)
+    df['date'] = pd.to_datetime(df['date'], dayfirst=True, errors='coerce')
 
+    # 6. Drop completely invalid rows
+    before = len(df)
+    df = df.dropna(subset=['date', 'sets', 'reps', 'weight', 'exercise'])
+    df = df[(df['sets'] > 0) & (df['reps'] > 0) & (df['weight'] >= 0)]
+    after = len(df)
+
+    skipped = before - after
     imported = 0
-    skipped = 0
-    for idx, row in df.iterrows():
-        try:
-            e = str(row['exercise']).strip()
-            s, r, w = int(row['Sets']), int(row['Reps']), float(row['Weight (kg)'])
-            if s > 0 and r > 0 and w >= 0:
-                add_exercise_entry(uid, row['Date'], e, s, r, w)
-                imported += 1
-            else:
-                skipped += 1
-        except Exception as e:
-            skipped += 1
-            st.warning(f"Row {idx+2}: Skipped — {str(e)}")
 
-    st.success(f"Imported {imported} workouts! (Skipped {skipped} invalid rows)")
+    # 7. Import valid rows
+    for _, row in df.iterrows():
+        try:
+            add_exercise_entry(
+                uid=uid,
+                date=row['date'].date(),
+                exercise=str(row['exercise']).strip(),
+                sets=int(row['sets']),
+                reps=int(row['reps']),
+                weight=float(row['weight'])
+            )
+            imported += 1
+        except Exception as e:
+            st.warning(f"Failed to import row: {row.to_dict()} → {e}")
+
+    st.success(f"Imported {imported} workouts!")
+    if skipped > 0:
+        st.info(f"Skipped {skipped} invalid or incomplete rows.")
     if imported == 0:
-        st.info("No valid data found. Check: Dates as DD/MM/YYYY, numbers only in Sets/Reps/Weight.")
-        st.dataframe(df.head(), use_container_width=True)  # Show first few rows for debugging
+        st.error("No valid workouts found. Check your data format.")
+        
 def import_exercise_reference(df):
     req = ['Exercise', 'Group', 'Primary', 'Secondary']
     if not all(col in df.columns for col in req):
