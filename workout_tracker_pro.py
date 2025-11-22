@@ -226,24 +226,21 @@ def import_emg_reference(df):
         st.error("Empty file!")
         return
 
-    # Keep original column names but clean them properly for Supabase
-    new_columns = {}
-    for col in df.columns:
-        cleaned = col.strip().lower().replace(" ", "_").replace("-", "_")
-        if cleaned == "quadriceps":
-            cleaned = "quads"  # Force match your preferred name
-        new_columns[col] = cleaned
+    # CRITICAL: Match exactly how pandas reads your file (spaces → _, case preserved)
+    df.columns = [col.strip().replace(" ", "_").replace("(", "").replace(")", "") for col in df.columns]
     
-    df = df.rename(columns=new_columns)
+    # Force "Exercise" → "exercise" (lowercase)
+    df = df.rename(columns={"Exercise": "exercise"})
 
     if 'exercise' not in df.columns:
         st.error("No 'Exercise' column found!")
+        st.write("Detected columns:", list(df.columns))
         return
 
     imported = 0
     for _, row in df.iterrows():
         ex = str(row['exercise']).strip()
-        if not ex or ex == 'nan':
+        if not ex or ex.lower() == 'nan':
             continue
 
         data = {"exercise": ex}
@@ -251,7 +248,9 @@ def import_emg_reference(df):
             if col == 'exercise':
                 continue
             try:
-                data[col] = float(row[col]) if pd.notna(row[col]) else 0.0
+                val = float(row[col]) if pd.notna(row[col]) else 0.0
+                # Keep exact column name as pandas saw it (e.g., Gluteus_Maximus)
+                data[col] = val
             except:
                 data[col] = 0.0
 
@@ -261,7 +260,7 @@ def import_emg_reference(df):
         except Exception as e:
             st.warning(f"Failed {ex}: {e}")
 
-    st.success(f"EMG DATA FULLY LOADED — {imported} exercises imported!")
+    st.success(f"EMG DATA LOADED — {imported} exercises imported successfully!")
     
 # ====================== MAIN UI ======================
 st.markdown("<h1 style='text-align: center; color: #1e40af;'>Workout Tracker Pro</h1>", unsafe_allow_html=True)
