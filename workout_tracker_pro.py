@@ -16,20 +16,22 @@ from io import BytesIO
 from supabase import create_client, Client
 
 # ====================== PAGE CONFIG & SUPABASE ======================
+# ====================== PAGE CONFIG & SUPABASE ======================
 st.set_page_config(page_title="Workout Tracker Pro", layout="wide")
 
 @st.cache_resource
 def get_supabase() -> Client:
+    # create_client takes positional args (url, key), not keyword args
     return create_client(
-        url=st.secrets["SUPABASE_URL"],
-        key=st.secrets["SUPABASE_ANON_KEY"]
+        st.secrets["SUPABASE_URL"],
+        st.secrets["SUPABASE_ANON_KEY"]
     )
 
 @st.cache_resource
 def get_supabase_admin() -> Client:
     return create_client(
-        url=st.secrets["SUPABASE_URL"],
-        key=st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
+        st.secrets["SUPABASE_URL"],
+        st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
     )
 
 supabase = get_supabase()
