@@ -78,7 +78,7 @@ def add_exercise_entry(uid, date, exercise, sets, reps, weight):
     }).execute()
 
 def get_user_exercises(uid):
-    res = supabase.table("exercises").select("*").eq("user_id", uid).order("date", desc=True).execute()
+    res = supabase_admin.table("exercises").select("*").eq("user_id", uid).order("date", desc=True).execute()
     return pd.DataFrame(res.data) if res.data else pd.DataFrame()
 
 def calculate_1rm(w, r):
