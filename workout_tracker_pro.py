@@ -86,7 +86,7 @@ def calculate_1rm(w, r):
 
 def add_emg_load(df):
     if df.empty: return df
-    res = supabase.table("emg_reference").select("*").execute()
+    res = supabase_admin.table("emg_reference").select("*").execute()
     emg_df = pd.DataFrame(res.data)
     if emg_df.empty: return df
     df['exercise_lower'] = df['exercise'].str.lower().str.strip()
