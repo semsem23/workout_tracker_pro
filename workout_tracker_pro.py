@@ -1,5 +1,8 @@
 # =========================================================
 # WORKOUT TRACKER PRO — CLOUD EDITION (2025)
+# → Fully converted to Supabase (PostgreSQL)
+# → Multi-user, Admin Panel, EMG Load, Week-vs-Week, Backup
+# → Deploy instantly: https://share.streamlit.io
 # =========================================================
 
 import streamlit as st
@@ -29,7 +32,6 @@ def get_supabase_admin() -> Client:
         key=st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
     )
 
-# Initialize clients
 supabase = get_supabase()
 supabase_admin = get_supabase_admin()
 
