@@ -307,7 +307,7 @@ else:
     # ====================== LOG WORKOUT ======================
     if selected == "Log Workout":
         st.markdown("### Log Workout")
-        res = supabase.table("exercise_reference").select("exercise, group_name").execute()
+        res = supabase_admin.table("exercise_reference").select("exercise, group_name").execute()
         ref_df = pd.DataFrame(res.data)
         options = ["Select..."]
         if not ref_df.empty:
@@ -361,7 +361,7 @@ else:
             df['date'] = pd.to_datetime(df['date'])
             df['volume'] = df['sets'] * df['reps'] * df['weight']
 
-            ref = supabase.table("exercise_reference").select("exercise, group_name, primary_muscle").execute()
+            ref = supabase_admin.table("exercise_reference").select("exercise, group_name, primary_muscle").execute()
             ref_df = pd.DataFrame(ref.data)
             if not ref_df.empty:
                 df = df.merge(ref_df[['exercise', 'group_name', 'primary_muscle']], on='exercise', how='left')
