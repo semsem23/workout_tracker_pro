@@ -223,38 +223,27 @@ def import_exercise_reference(df):
 
 def import_emg_reference(df):
     if df.empty:
-        st.error("File is empty!")
+        st.error("Empty file!")
         return
 
-    # Find the exercise column regardless of case
-    exercise_col = next((col for col in df.columns if col.lower() == 'exercise'), None)
-    if not exercise_col:
-        st.error("No 'Exercise' column found!")
-        return
+    # Exact header your Excel must have (copy-paste this into row 1 of emg.xlsx)
+    expected = ['Exercise','quads','hamstrings','glutes_maximus','glutes_medius','glutes_minimus','adductors','soleus','gastrocnemius','pectoralis_major','pectoralis_minor','latissimus_dorsi','upper_trapezius','middle_trapezius','lower_trapezius','anterior_deltoid','lateral_deltoid','rear_deltoid','biceps','triceps','forearms','rectus_abdominis','brachialis','obliques','erector_spinae','serratus_anterior','rhomboids']
+
+    df.columns = expected[:len(df.columns)]  # force exact order/names
 
     imported = 0
     for _, row in df.iterrows():
-        ex = str(row[exercise_col]).strip()
+        ex = str(row['Exercise']).strip()
         if not ex or ex.lower() == 'nan':
             continue
-
         data = {"exercise": ex}
-        for col in df.columns:
-            if col.lower() == 'exercise':
-                continue
-            try:
-                value = float(row[col]) if pd.notna(row[col]) else 0.0
-                data[col] = value
-            except:
-                data[col] = 0.0
+        for col in expected[1:]:
+            data[col] = float(row[col]) if pd.notna(row[col]) else 0.0
 
-        try:
-            supabase_admin.table("emg_reference").upsert(data, on_conflict="exercise").execute()
-            imported += 1
-        except Exception as e:
-            st.warning(f"Failed '{ex}': {e}")
+        supabase_admin.table("emg_reference").upsert(data, on_conflict="exercise").execute()
+        imported += 1
 
-    st.success(f"EMG DATA LOADED — {imported} exercises imported!")
+    st.success(f"EMG LOADED — {imported} exercises imported forever!")
     
 # ====================== MAIN UI ======================
 st.markdown("<h1 style='text-align: center; color: #1e40af;'>Workout Tracker Pro</h1>", unsafe_allow_html=True)
