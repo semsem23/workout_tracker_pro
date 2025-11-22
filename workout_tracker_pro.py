@@ -226,39 +226,37 @@ def import_emg_reference(df):
         st.error("File is empty!")
         return
 
-    # Normalize columns (strip spaces, lower case)
-    df.columns = [col.strip().replace(" ", "_").replace("-", "_").lower() for col in df.columns]
-    
+    # Normalize column names exactly like your file
+    df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
     if 'exercise' not in df.columns:
-        st.error("Missing 'exercise' column. Expected columns: exercise, chest, back, quads, etc.")
-        st.info("Detected columns: " + ", ".join(df.columns.tolist()))
+        st.error("No 'Exercise' column found!")
         return
 
     imported = 0
     for _, row in df.iterrows():
         ex = str(row['exercise']).strip()
-        if not ex:
+        if not ex or ex == 'nan':
             continue
-        
+
         data = {"exercise": ex}
         for col in df.columns:
-            if col != 'exercise' and pd.notna(row[col]):
-                try:
-                    data[col] = float(row[col])
-                except:
-                    data[col] = None  # Skip invalid numbers
-        
+            if col == 'exercise':
+                continue
+            # Convert any value to float, skip if impossible
+            try:
+                val = float(row[col]) if pd.notna(row[col]) else 0
+                data[col] = val
+            except:
+                data[col] = 0
+
         try:
-            # Use supabase_admin to bypass RLS (safe for admin-only EMG Editor)
             supabase_admin.table("emg_reference").upsert(data, on_conflict="exercise").execute()
             imported += 1
         except Exception as e:
-            st.warning(f"Failed to import '{ex}': {e}")
+            st.warning(f"Failed {ex}: {e}")
 
-    st.success(f"EMG data updated — {imported} exercises imported!")
-    if imported == 0:
-        st.info("No valid data found. Check file format and try again.")
-
+    st.success(f"EMG REFERENCE FULLY LOADED — {imported} exercises imported!")
+    
 # ====================== MAIN UI ======================
 st.markdown("<h1 style='text-align: center; color: #1e40af;'>Workout Tracker Pro</h1>", unsafe_allow_html=True)
 
