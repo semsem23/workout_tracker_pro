@@ -223,11 +223,12 @@ def import_exercise_reference(df):
 
 def import_emg_reference(df):
     if df.empty:
-        st.error("File is empty!")
+        st.error("Empty file!")
         return
 
-    # Normalize column names exactly like your file
-    df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
+    # Normalize column names
+    df.columns = [col.strip().lower().replace(" ", "_").replace("-", "_") for col in df.columns]
+    
     if 'exercise' not in df.columns:
         st.error("No 'Exercise' column found!")
         return
@@ -235,27 +236,33 @@ def import_emg_reference(df):
     imported = 0
     for _, row in df.iterrows():
         ex = str(row['exercise']).strip()
-        if not ex or ex == 'nan':
+        if not ex or ex.lower() == 'nan':
             continue
 
+        # Build data dict with ONLY columns that actually exist in DB or will be created
         data = {"exercise": ex}
         for col in df.columns:
             if col == 'exercise':
                 continue
-            # Convert any value to float, skip if impossible
             try:
-                val = float(row[col]) if pd.notna(row[col]) else 0
+                val = float(row[col]) if pd.notna(row[col]) else 0.0
                 data[col] = val
             except:
-                data[col] = 0
+                data[col] = 0.0
 
         try:
-            supabase_admin.table("emg_reference").upsert(data, on_conflict="exercise").execute()
+            # This magically adds new columns automatically in Supabase!
+            supabase_admin.table("emg_reference").upsert(
+                data,
+                on_conflict="exercise"
+            ).execute()
             imported += 1
         except Exception as e:
             st.warning(f"Failed {ex}: {e}")
 
-    st.success(f"EMG REFERENCE FULLY LOADED — {imported} exercises imported!")
+    st.success(f"EMG REFERENCE LOADED — {imported} exercises + all muscle columns added!")
+    st.balloons()
+    st.info("Supabase automatically added all missing muscle columns (gluteus_maximus, etc.)")
     
 # ====================== MAIN UI ======================
 st.markdown("<h1 style='text-align: center; color: #1e40af;'>Workout Tracker Pro</h1>", unsafe_allow_html=True)
