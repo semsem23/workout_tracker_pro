@@ -226,18 +226,25 @@ def import_emg_reference(df):
         st.error("File is empty!")
         return
 
+    # Find the exercise column regardless of case
+    exercise_col = next((col for col in df.columns if col.lower() == 'exercise'), None)
+    if not exercise_col:
+        st.error("No 'Exercise' column found!")
+        return
+
     imported = 0
     for _, row in df.iterrows():
-        ex = str(row['Exercise']).strip()
-        if not ex or ex == 'nan':
+        ex = str(row[exercise_col]).strip()
+        if not ex or ex.lower() == 'nan':
             continue
 
         data = {"exercise": ex}
         for col in df.columns:
-            if col == "Exercise":
+            if col.lower() == 'exercise':
                 continue
             try:
-                data[col] = float(row[col]) if pd.notna(row[col]) else 0.0
+                value = float(row[col]) if pd.notna(row[col]) else 0.0
+                data[col] = value
             except:
                 data[col] = 0.0
 
@@ -245,9 +252,9 @@ def import_emg_reference(df):
             supabase_admin.table("emg_reference").upsert(data, on_conflict="exercise").execute()
             imported += 1
         except Exception as e:
-            st.warning(f"Failed {ex}: {e}")
+            st.warning(f"Failed '{ex}': {e}")
 
-    st.success(f"EMG DATA FINALLY LOADED — {imported} exercises imported!")
+    st.success(f"EMG DATA LOADED — {imported} exercises imported!")
     
 # ====================== MAIN UI ======================
 st.markdown("<h1 style='text-align: center; color: #1e40af;'>Workout Tracker Pro</h1>", unsafe_allow_html=True)
