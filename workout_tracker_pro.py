@@ -16,7 +16,6 @@ from io import BytesIO
 from supabase import create_client, Client
 
 # ====================== PAGE CONFIG & SUPABASE ======================
-# ====================== PAGE CONFIG & SUPABASE ======================
 st.set_page_config(page_title="Workout Tracker Pro", layout="wide")
 
 @st.cache_resource
@@ -125,12 +124,30 @@ def log_action(admin, action, target="", details=""):
     }).execute()
 
 def import_workout_logs(uid, df):
-    req = ['Date', 'Exercise', 'Sets', 'Reps', 'Weight (kg)']
-    if not all(col in df.columns for col in req):
-        st.error(f"Missing columns: {set(req) - set(df.columns)}"); return
-    df = df[req].copy()
+    # Normalize column names: strip spaces, lower case, then match known patterns
+    df.columns = df.columns.str.strip()
+    col_map = {col.lower().replace(" ", "").replace("(kg)", ""): col for col in df.columns}
+    
+    required = {'date', 'exercise', 'sets', 'reps', 'weight'}
+    if not required.issubset(col_map.keys()):
+        missing = required - col_map.keys()
+        st.error(f"Missing or misnamed columns: {missing}")
+        st.write("Expected (case-insensitive): Date, Exercise, Sets, Reps, Weight (kg)")
+        return
+
+    # Map to standard names
+    df = df.rename(columns={
+        col_map['date']: 'Date',
+        col_map['exercise']: 'Exercise',
+        col_map['sets']: 'Sets',
+        col_map['reps']: 'Reps',
+        col_map.get('weight', col_map.get('weightkg', None)): 'Weight (kg)'
+    })
+
+    df = df[['Date', 'Exercise', 'Sets', 'Reps', 'Weight (kg)']].copy()
     df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
     df = df.dropna(subset=['Date'])
+
     imported = 0
     for _, row in df.iterrows():
         try:
@@ -139,8 +156,12 @@ def import_workout_logs(uid, df):
             if s > 0 and r > 0 and w >= 0:
                 add_exercise_entry(uid, row['Date'], e, s, r, w)
                 imported += 1
-        except: continue
+        except: 
+            continue
+            
     st.success(f"Imported {imported} workouts!")
+    if imported == 0:
+        st.info("Tip: Check column names match exactly → Date, Exercise, Sets, Reps, Weight (kg)")
 
 def import_exercise_reference(df):
     req = ['Exercise', 'Group', 'Primary', 'Secondary']
