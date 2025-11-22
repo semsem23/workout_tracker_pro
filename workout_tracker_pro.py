@@ -226,9 +226,16 @@ def import_emg_reference(df):
         st.error("Empty file!")
         return
 
-    # Normalize column names
-    df.columns = [col.strip().lower().replace(" ", "_").replace("-", "_") for col in df.columns]
+    # Keep original column names but clean them properly for Supabase
+    new_columns = {}
+    for col in df.columns:
+        cleaned = col.strip().lower().replace(" ", "_").replace("-", "_")
+        if cleaned == "quadriceps":
+            cleaned = "quads"  # Force match your preferred name
+        new_columns[col] = cleaned
     
+    df = df.rename(columns=new_columns)
+
     if 'exercise' not in df.columns:
         st.error("No 'Exercise' column found!")
         return
@@ -236,33 +243,25 @@ def import_emg_reference(df):
     imported = 0
     for _, row in df.iterrows():
         ex = str(row['exercise']).strip()
-        if not ex or ex.lower() == 'nan':
+        if not ex or ex == 'nan':
             continue
 
-        # Build data dict with ONLY columns that actually exist in DB or will be created
         data = {"exercise": ex}
         for col in df.columns:
             if col == 'exercise':
                 continue
             try:
-                val = float(row[col]) if pd.notna(row[col]) else 0.0
-                data[col] = val
+                data[col] = float(row[col]) if pd.notna(row[col]) else 0.0
             except:
                 data[col] = 0.0
 
         try:
-            # This magically adds new columns automatically in Supabase!
-            supabase_admin.table("emg_reference").upsert(
-                data,
-                on_conflict="exercise"
-            ).execute()
+            supabase_admin.table("emg_reference").upsert(data, on_conflict="exercise").execute()
             imported += 1
         except Exception as e:
             st.warning(f"Failed {ex}: {e}")
 
-    st.success(f"EMG REFERENCE LOADED — {imported} exercises + all muscle columns added!")
-    st.balloons()
-    st.info("Supabase automatically added all missing muscle columns (gluteus_maximus, etc.)")
+    st.success(f"EMG DATA FULLY LOADED — {imported} exercises imported!")
     
 # ====================== MAIN UI ======================
 st.markdown("<h1 style='text-align: center; color: #1e40af;'>Workout Tracker Pro</h1>", unsafe_allow_html=True)
