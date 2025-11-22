@@ -1,7 +1,7 @@
-streamlit==1.38.0
-pandas==2.2.2
-plotly==5.22.0
+streamlit==1.39.0
+pandas==2.2.3
+plotly==5.24.1
 passlib==1.7.4
 streamlit-option-menu==0.3.12
-supabase==2.4.0
-openpyxl==3.1.2
+supabase==2.7.1
+openpyxl==3.1.5

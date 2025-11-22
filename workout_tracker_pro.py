@@ -17,12 +17,19 @@ st.set_page_config(page_title="Workout Tracker Pro", layout="wide")
 
 @st.cache_resource
 def get_supabase() -> Client:
-    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_ANON_KEY"])
+    return create_client(
+        url=st.secrets["SUPABASE_URL"],
+        key=st.secrets["SUPABASE_ANON_KEY"]
+    )
 
 @st.cache_resource
 def get_supabase_admin() -> Client:
-    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_SERVICE_ROLE_KEY"])
+    return create_client(
+        url=st.secrets["SUPABASE_URL"],
+        key=st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
+    )
 
+# Initialize clients
 supabase = get_supabase()
 supabase_admin = get_supabase_admin()
 
