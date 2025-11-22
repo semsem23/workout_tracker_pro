@@ -222,17 +222,42 @@ def import_exercise_reference(df):
     st.success("Exercise reference updated!")
 
 def import_emg_reference(df):
-    df.columns = [c.strip().replace(" ", "_").replace("-", "_").lower() for c in df.columns]
+    if df.empty:
+        st.error("File is empty!")
+        return
+
+    # Normalize columns (strip spaces, lower case)
+    df.columns = [col.strip().replace(" ", "_").replace("-", "_").lower() for col in df.columns]
+    
     if 'exercise' not in df.columns:
-        st.error("Missing 'exercise' column"); return
+        st.error("Missing 'exercise' column. Expected columns: exercise, chest, back, quads, etc.")
+        st.info("Detected columns: " + ", ".join(df.columns.tolist()))
+        return
+
+    imported = 0
     for _, row in df.iterrows():
         ex = str(row['exercise']).strip()
+        if not ex:
+            continue
+        
         data = {"exercise": ex}
         for col in df.columns:
             if col != 'exercise' and pd.notna(row[col]):
-                data[col] = float(row[col])
-        supabase_admin.table("emg_reference").upsert(data, on_conflict="exercise").execute()
-    st.success("EMG reference updated!")
+                try:
+                    data[col] = float(row[col])
+                except:
+                    data[col] = None  # Skip invalid numbers
+        
+        try:
+            # Use supabase_admin to bypass RLS (safe for admin-only EMG Editor)
+            supabase_admin.table("emg_reference").upsert(data, on_conflict="exercise").execute()
+            imported += 1
+        except Exception as e:
+            st.warning(f"Failed to import '{ex}': {e}")
+
+    st.success(f"EMG data updated — {imported} exercises imported!")
+    if imported == 0:
+        st.info("No valid data found. Check file format and try again.")
 
 # ====================== MAIN UI ======================
 st.markdown("<h1 style='text-align: center; color: #1e40af;'>Workout Tracker Pro</h1>", unsafe_allow_html=True)
