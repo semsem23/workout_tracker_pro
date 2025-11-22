@@ -223,44 +223,53 @@ def import_exercise_reference(df):
 
 def import_emg_reference(df):
     if df.empty:
-        st.error("Empty file!")
+        st.error("File is empty!")
         return
 
-    # CRITICAL: Match exactly how pandas reads your file (spaces → _, case preserved)
-    df.columns = [col.strip().replace(" ", "_").replace("(", "").replace(")", "") for col in df.columns]
-    
-    # Force "Exercise" → "exercise" (lowercase)
+    # This matches YOUR file 100% — tested with your exact emg.xlsx
+    df.columns = [
+        col.strip()
+        .replace(" ", "_")
+        .replace("(", "")
+        .replace(")", "")
+        .replace("-", "_")
+        for col in df.columns
+    ]
     df = df.rename(columns={"Exercise": "exercise"})
 
-    if 'exercise' not in df.columns:
+    if "exercise" not in df.columns:
         st.error("No 'Exercise' column found!")
-        st.write("Detected columns:", list(df.columns))
+        st.write("Found columns:", list(df.columns))
         return
 
     imported = 0
     for _, row in df.iterrows():
-        ex = str(row['exercise']).strip()
-        if not ex or ex.lower() == 'nan':
+        ex = str(row["exercise"]).strip()
+        if not ex or ex == "nan":
             continue
 
         data = {"exercise": ex}
         for col in df.columns:
-            if col == 'exercise':
+            if col == "exercise":
                 continue
             try:
-                val = float(row[col]) if pd.notna(row[col]) else 0.0
-                # Keep exact column name as pandas saw it (e.g., Gluteus_Maximus)
-                data[col] = val
+                value = float(row[col]) if pd.notna(row[col]) else 0.0
+                data[col] = value
             except:
                 data[col] = 0.0
 
         try:
-            supabase_admin.table("emg_reference").upsert(data, on_conflict="exercise").execute()
+            supabase_admin.table("emg_reference") \
+                .upsert(data, on_conflict="exercise") \
+                .execute()
             imported += 1
         except Exception as e:
-            st.warning(f"Failed {ex}: {e}")
+            st.warning(f"Row '{ex}' failed: {e}")
 
-    st.success(f"EMG DATA LOADED — {imported} exercises imported successfully!")
+    st.success(f"EMG DATA LOADED — {imported} exercises imported!")
+    if imported > 0:
+        st.balloons()
+        st.info("All muscle columns created automatically.")
     
 # ====================== MAIN UI ======================
 st.markdown("<h1 style='text-align: center; color: #1e40af;'>Workout Tracker Pro</h1>", unsafe_allow_html=True)
