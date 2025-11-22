@@ -124,45 +124,74 @@ def log_action(admin, action, target="", details=""):
     }).execute()
 
 def import_workout_logs(uid, df):
-    # Normalize column names: strip spaces, lower case, then match known patterns
-    df.columns = df.columns.str.strip()
-    col_map = {col.lower().replace(" ", "").replace("(kg)", ""): col for col in df.columns}
-    
+    # Auto-normalize columns (case-insensitive, strip spaces, handle variations)
+    df.columns = df.columns.str.strip().str.lower()
+    col_map = {}
+    for col in df.columns:
+        clean_col = col.replace(" ", "").replace("(kg)", "").replace("kg", "").replace("wgt", "weight")
+        if 'date' in clean_col or 'day' in clean_col:
+            col_map['date'] = col
+        elif 'exercise' in clean_col or 'exer' in clean_col:
+            col_map['exercise'] = col
+        elif 'sets' in clean_col:
+            col_map['sets'] = col
+        elif 'reps' in clean_col:
+            col_map['reps'] = col
+        elif 'weight' in clean_col:
+            col_map['weight'] = col
+
     required = {'date', 'exercise', 'sets', 'reps', 'weight'}
-    if not required.issubset(col_map.keys()):
-        missing = required - col_map.keys()
-        st.error(f"Missing or misnamed columns: {missing}")
-        st.write("Expected (case-insensitive): Date, Exercise, Sets, Reps, Weight (kg)")
+    missing = required - set(col_map.keys())
+    if missing:
+        st.error(f"Missing columns: {missing}. Expected: Date, Exercise, Sets, Reps, Weight(kg)")
+        st.info("Tip: Columns are case-insensitive — e.g., 'date', 'WEIGHT KG', or 'Exerc' all work.")
         return
 
-    # Map to standard names
-    df = df.rename(columns={
-        col_map['date']: 'Date',
-        col_map['exercise']: 'Exercise',
-        col_map['sets']: 'Sets',
-        col_map['reps']: 'Reps',
-        col_map.get('weight', col_map.get('weightkg', None)): 'Weight (kg)'
-    })
+    # Rename to standard names
+    df = df.rename(columns=col_map)
 
-    df = df[['Date', 'Exercise', 'Sets', 'Reps', 'Weight (kg)']].copy()
-    df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
-    df = df.dropna(subset=['Date'])
+    # Clean and convert data (bulletproof)
+    df = df.copy()
+    df['Date'] = pd.to_datetime(df['date'], dayfirst=True, errors='coerce', infer_datetime_format=True)
+    df = df.dropna(subset=['Date'])  # Drop invalid dates
+
+    # Clean numeric columns (handle text like "80kg", "3 sets", "8 reps")
+    def clean_numeric(val):
+        if pd.isna(val):
+            return None
+        str_val = str(val).strip().lower()
+        # Remove text like "kg", "sets", "reps"
+        clean = ''.join(c for c in str_val if c.isdigit() or c == '.')
+        try:
+            return float(clean) if clean else None
+        except:
+            return None
+
+    df['Sets'] = df['sets'].apply(clean_numeric)
+    df['Reps'] = df['reps'].apply(clean_numeric)
+    df['Weight (kg)'] = df['weight'].apply(clean_numeric)
+
+    df = df.dropna(subset=['Sets', 'Reps', 'Weight (kg)'])  # Drop invalid numerics
 
     imported = 0
-    for _, row in df.iterrows():
+    skipped = 0
+    for idx, row in df.iterrows():
         try:
-            e = str(row['Exercise']).strip()
+            e = str(row['exercise']).strip()
             s, r, w = int(row['Sets']), int(row['Reps']), float(row['Weight (kg)'])
             if s > 0 and r > 0 and w >= 0:
                 add_exercise_entry(uid, row['Date'], e, s, r, w)
                 imported += 1
-        except: 
-            continue
-            
-    st.success(f"Imported {imported} workouts!")
-    if imported == 0:
-        st.info("Tip: Check column names match exactly → Date, Exercise, Sets, Reps, Weight (kg)")
+            else:
+                skipped += 1
+        except Exception as e:
+            skipped += 1
+            st.warning(f"Row {idx+2}: Skipped — {str(e)}")
 
+    st.success(f"Imported {imported} workouts! (Skipped {skipped} invalid rows)")
+    if imported == 0:
+        st.info("No valid data found. Check: Dates as DD/MM/YYYY, numbers only in Sets/Reps/Weight.")
+        st.dataframe(df.head(), use_container_width=True)  # Show first few rows for debugging
 def import_exercise_reference(df):
     req = ['Exercise', 'Group', 'Primary', 'Secondary']
     if not all(col in df.columns for col in req):
