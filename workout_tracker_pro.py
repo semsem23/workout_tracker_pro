@@ -68,12 +68,17 @@ create_super_admin()
 
 # ====================== CORE DB FUNCTIONS ======================
 def add_exercise_entry(uid, date, exercise, sets, reps, weight):
+    # Locale-safe weight conversion (handles "80,00" or "80.0")
+    if isinstance(weight, str):
+        weight = weight.replace(',', '.')  # Convert comma to dot
+    weight = float(weight)
+    
     supabase.table("exercises").insert({
         "user_id": uid,
         "date": date.strftime("%Y-%m-%d"),
         "exercise": exercise,
-        "sets": sets,
-        "reps": reps,
+        "sets": int(sets),
+        "reps": int(reps),
         "weight": weight
     }).execute()
 
