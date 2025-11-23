@@ -68,19 +68,30 @@ create_super_admin()
 
 # ====================== CORE DB FUNCTIONS ======================
 def add_exercise_entry(uid, date, exercise, sets, reps, weight):
-    # Locale-safe weight conversion (handles "80,00" or "80.0")
+    # ---- FIX 1: Locale-safe weight (handles 80,00 → 80.0) ----
     if isinstance(weight, str):
-        weight = weight.replace(',', '.')  # Convert comma to dot
-    weight = float(weight)
-    
-    supabase.table("exercises").insert({
-        "user_id": uid,
-        "date": date.strftime("%Y-%m-%d"),
-        "exercise": exercise,
-        "sets": int(sets),
-        "reps": int(reps),
-        "weight": weight
-    }).execute()
+        weight_str = weight.strip().replace(' ', '').replace(',', '.')
+        try:
+            weight = float(weight_str)
+        except:
+            st.error("Invalid weight – use numbers only (e.g. 80 or 80,5)")
+            return
+    else:
+        weight = float(weight)
+
+    # ---- FIX 2: Use supabase_admin to avoid any RLS weirdness on insert ----
+    try:
+        supabase_admin.table("exercises").insert({
+            "user_id": uid,
+            "date": date.strftime("%Y-%m-%d"),
+            "exercise": exercise.strip(),
+            "sets": int(sets),
+            "reps": int(reps),
+            "weight": round(weight, 2)
+        }).execute()
+        st.success("Logged!")
+    except Exception as e:
+        st.error(f"Failed to log: {e}")
 
 def get_user_exercises(uid):
     res = supabase_admin.table("exercises").select("*").eq("user_id", uid).order("date", desc=True).execute()
@@ -336,7 +347,7 @@ else:
             with c1: date = st.date_input("Date", datetime.today())
             with c2: sets = st.number_input("Sets",1,50,3)
             with c3: reps = st.number_input("Reps",1,100,8)
-            with c4: weight = st.number_input("Weight (kg)",0.0,1000.0,80.0,0.5)
+            with c4: weight = st.number_input("Weight (kg)", 0.0, 1000.0, 80.0, 0.5, format="%f")
             with c5:
                 if st.button("LOG", type="primary"):
                     add_exercise_entry(uid, date, ex, sets, reps, weight)
